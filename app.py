@@ -4,6 +4,7 @@ from services.dag_debug import call_execute_dag
 from services.hero import get_heroPids_batch
 from services.product import fetch_product_details
 from services.pricing import get_pricing_features
+from typing import List, Optional
 
 PRICING_FEATURES = [
     "serving_price",
@@ -25,16 +26,47 @@ HOST_MAPPING = {
     }
 }
 
+FEED_TYPES: List[str] = [
+    "for_you",
+    "catalog_recommendation",
+    "catalog_listing_page",
+    "recently_viewed_catalog_recommendation",
+]
+
+@st.cache_data(show_spinner=False)
+def _cached_get_hero_pid_map(catalog_ids: List[int]):
+    """Batch-fetch hero PIDs for a list of catalog IDs (cached)."""
+    return get_heroPids_batch(catalog_ids)
+
+@st.cache_data(show_spinner=False)
+def _cached_fetch_product_details(hero_pids: List[str]):
+    """Fetch product details for the hero PIDs (cached)."""
+    return fetch_product_details(hero_pids)
+
+@st.cache_data(show_spinner=False)
+def _cached_pricing_features(
+    *,
+    user_id: str,
+    pdp_data: List[tuple],
+    client_id: str = "ios",
+    user_pincode: str = "122001",
+    app_version_code: str = "685",
+):
+    """Retrieve pricing features for a batch of products (cached)."""
+    return get_pricing_features(
+        user_id=user_id,
+        pdp_data=pdp_data,
+        client_id=client_id,
+        user_pincode=user_pincode,
+        app_version_code=app_version_code,
+        pricing_features=PRICING_FEATURES,
+    )
+
 st.title("Execute DAG Debugger")
 
 user_id = st.text_input("User ID", value="123456")
 environment = st.selectbox("Environment", ["pre-prod", "prod"], index=0)
-feed_type = st.selectbox("Feed Type", [
-    "for_you",
-    "catalog_recommendation", 
-    "catalog_listing_page",
-    "recently_viewed_catalog_recommendation"
-], index=0)
+feed_type = st.selectbox("Feed Type", FEED_TYPES, index=0)
 
 # Automatically set IOP host based on feed type and environment
 iop_host = HOST_MAPPING[environment][feed_type]
@@ -172,36 +204,68 @@ if st.button("Execute DAG"):
         request_kwargs["Data"] = data
 
     # Pass raw request_kwargs and config_source_type to the executor
-    response = call_execute_dag(request_kwargs, config_source_type, user_id, user_context, feed_type, iop_host)
+    with st.spinner("Executing DAG..."):
+        response = call_execute_dag(
+            request_kwargs,
+            config_source_type,
+            user_id,
+            user_context,
+            feed_type,
+            iop_host,
+        )
 
     if response.Success:
         st.success("DAG executed successfully!")
-        st.write(response)
+        # st.write(response)
+        # Render debug_config DAG if present
+        debug_cfg_raw = response.Results.get("debug_config") if isinstance(response.Results, dict) else None
+        if debug_cfg_raw:
+            try:
+                debug_cfg_json = (
+                    debug_cfg_raw
+                    if isinstance(debug_cfg_raw, dict)
+                    else json.loads(debug_cfg_raw)
+                )
+                dag_cfg = (
+                    debug_cfg_json.get("dag_config")
+                    or debug_cfg_json.get("config", {}).get("dag_config")
+                )
+                if dag_cfg:
+                    dot_lines = ["digraph DAG {"]
+                    for src, dst_list in dag_cfg.items():
+                        for dst in dst_list:
+                            dot_lines.append(f'  "{src}" -> "{dst}";')
+                    dot_lines.append("}")
+                    st.subheader("DAG Graph (debug_config)")
+                    st.graphviz_chart("\n".join(dot_lines))
+            except Exception as e:
+                st.error(f"Failed to render debug_config DAG: {e}")
+
         for key, value in response.Results.items():
-            with st.expander(f"Result for: {key}"):
-                try:
-                    parsed = json.loads(value)
-                    if isinstance(parsed, list) and all(isinstance(item, dict) for item in parsed):
+            # Skip debug_config here since already handled above
+            if key == "debug_config":
+                continue
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, list) and all(isinstance(item, dict) for item in parsed):
+                    # Show expander with product count
+                    with st.expander(f"Result for: {key} ({len(parsed)} results)"):
                         with st.spinner("Fetching hero PIDs in batch..."):
                             catalog_ids = [item.get("id") for item in parsed if item.get("id") is not None]
-                            hero_pid_map = get_heroPids_batch(catalog_ids)
+                            hero_pid_map = _cached_get_hero_pid_map(catalog_ids)
                             for item in parsed:
                                 cid = item.get("id")
                                 item["hero_pid"] = hero_pid_map.get(cid, "N/A")
                         hero_pids = [pid for pid in hero_pid_map.values() if pid != "N/A"]
                         with st.spinner("Fetching product details for hero PIDs..."):
-                            product_details = fetch_product_details(hero_pids)
+                            product_details = _cached_fetch_product_details(hero_pids)
                         if product_details:
                             st.subheader("Hero Product Details")
                             num_cols = 3
                             pdp_data = [(prod["product_id"], "source", "") for prod in product_details if prod.get("product_id")]
-                            pricing_data = get_pricing_features(
+                            pricing_data = _cached_pricing_features(
                                 user_id=user_id,
                                 pdp_data=pdp_data,
-                                client_id="ios",
-                                user_pincode="122001",
-                                app_version_code="685",
-                                pricing_features=PRICING_FEATURES
                             )
                             for prod in product_details:
                                 pid = str(prod.get("product_id"))
@@ -215,18 +279,27 @@ if st.button("Execute DAG"):
                                         images = product.get('product_images', [])
                                         if images:
                                             st.image(images[0], width=150)
-                                        st.markdown(f"Product ID: `{product.get('product_id', 'N/A')}`")
-                                        st.markdown(f"Catalog ID: `{product.get('catalog_id', 'N/A')}`")
-                                        serving_price = product.get('pricing', {}).get('serving_price')
-                                        if serving_price:
-                                            st.markdown(f"**Serving Price:** ₹{serving_price}")
-                                        st.write(product)
+                                        # Create tabs for product view
+                                        tab1, tab2 = st.tabs(["📋 Summary", "🔧 JSON Details"])
+                                        
+                                        with tab1:
+                                            st.markdown(f"Product ID: `{product.get('product_id', 'N/A')}`")
+                                            st.markdown(f"Catalog ID: `{product.get('catalog_id', 'N/A')}`")
+                                            serving_price = product.get('pricing', {}).get('serving_price')
+                                            if serving_price:
+                                                st.markdown(f"**Serving Price:** ₹{serving_price}")
+                                        
+                                        with tab2:
+                                            st.json(product)
                                         st.markdown("---")
                         else:
                             st.info("No product details found for hero_pids.")
-                    else:
+                else:
+                    # Handle non-list or non-dict items
+                    with st.expander(f"Result for: {key}"):
                         st.info("null")
-                except Exception as e:
+            except Exception as e:
+                with st.expander(f"Result for: {key}"):
                     st.error(f"Could not parse result for {key}: {e}")
                     st.text(value)
     else:

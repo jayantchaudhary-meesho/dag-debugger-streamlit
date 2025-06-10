@@ -3,8 +3,7 @@
 import grpc
 import warnings
 
-from debug import debug_pb2
-# import debug_pb2_grpc
+from debug import debug_pb2 as debug_dot_debug__pb2
 
 GRPC_GENERATED_VERSION = '1.71.0'
 GRPC_VERSION = grpc.__version__
@@ -19,7 +18,7 @@ except ImportError:
 if _version_not_supported:
     raise RuntimeError(
         f'The grpc package installed is at version {GRPC_VERSION},'
-        + f' but the generated code in debug_pb2_grpc.py depends on'
+        + f' but the generated code in debug/debug_pb2_grpc.py depends on'
         + f' grpcio>={GRPC_GENERATED_VERSION}.'
         + f' Please upgrade your grpc module to grpcio>={GRPC_GENERATED_VERSION}'
         + f' or downgrade your generated code using grpcio-tools<={GRPC_VERSION}.'
@@ -37,8 +36,8 @@ class DAGDebugServiceStub(object):
         """
         self.ExecuteDAG = channel.unary_unary(
                 '/proto.DAGDebugService/ExecuteDAG',
-                request_serializer=debug_pb2.ExecuteDAGRequest.SerializeToString,
-                response_deserializer=debug_pb2.ExecuteDAGResponse.FromString,
+                request_serializer=debug_dot_debug__pb2.ExecuteDAGRequest.SerializeToString,
+                response_deserializer=debug_dot_debug__pb2.ExecuteDAGResponse.FromString,
                 _registered_method=True)
 
 
@@ -56,8 +55,8 @@ def add_DAGDebugServiceServicer_to_server(servicer, server):
     rpc_method_handlers = {
             'ExecuteDAG': grpc.unary_unary_rpc_method_handler(
                     servicer.ExecuteDAG,
-                    request_deserializer=debug_pb2.ExecuteDAGRequest.FromString,
-                    response_serializer=debug_pb2.ExecuteDAGResponse.SerializeToString,
+                    request_deserializer=debug_dot_debug__pb2.ExecuteDAGRequest.FromString,
+                    response_serializer=debug_dot_debug__pb2.ExecuteDAGResponse.SerializeToString,
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
@@ -85,8 +84,8 @@ class DAGDebugService(object):
             request,
             target,
             '/proto.DAGDebugService/ExecuteDAG',
-            debug_pb2.ExecuteDAGRequest.SerializeToString,
-            debug_pb2.ExecuteDAGResponse.FromString,
+            debug_dot_debug__pb2.ExecuteDAGRequest.SerializeToString,
+            debug_dot_debug__pb2.ExecuteDAGResponse.FromString,
             options,
             channel_credentials,
             insecure,

@@ -3,13 +3,14 @@ syntax = "proto3";
 
 package proto;
 
-option go_package = "github.com/Meesho/iop-starter/internal/dag/debug/proto";
+option go_package = ".;proto";
 
 import "google/protobuf/struct.proto";
 
 service DAGDebugService {
   rpc ExecuteDAG(ExecuteDAGRequest) returns (ExecuteDAGResponse) {}
 }
+
 message DebugExecutionRequestData {
   string UserId = 1;
   string FeedType = 2;
@@ -23,6 +24,7 @@ message DebugExecutionRequestData {
   string Cursor = 10;
   repeated string CatalogSchedulingStatuses = 11;
 }
+
 message FeedId {
   int32 CollectionId = 1;
   int32 CatalogId = 2;
@@ -50,7 +52,8 @@ message ConfigSelector {
 }
 
 message ExecuteDAGResponse {
-  bool Success = 1;
-  string Error = 2;
-  map<string, string> Results = 3;
+  bool success = 1;
+  string error = 2;
+  map<string, string> results = 3;
+  string debug_config = 4; // JSON string
 }
