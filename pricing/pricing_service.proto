@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+option go_package = "../grpc";
+
+// Request
+message EntityQueries {
+  string label = 1;
+  repeated EntityId ids = 2;
+  message EntityId{
+    repeated EntityKey keys = 1;
+    message EntityKey{
+      string type = 1;
+      string value = 2;
+    }
+  }
+  repeated FeatureGroups featureGroups = 3;
+  message FeatureGroups {
+    repeated string features = 1;
+    string label = 2;
+  }
+}
+
+//Response
+message EntityPayload{
+  string entityLabel = 1;
+  repeated Data data = 2;
+  message Data{
+    repeated string features = 1;
+  }
+  int32 keySize = 3;
+}
+
+// Service
+service PricingFeatureRetrievalService {
+  rpc retrieveFeatures(EntityQueries) returns (EntityPayload) {};
+} 

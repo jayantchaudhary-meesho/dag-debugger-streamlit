@@ -1,0 +1,56 @@
+// dag_debug.proto
+syntax = "proto3";
+
+package proto;
+
+option go_package = "github.com/Meesho/iop-starter/internal/dag/debug/proto";
+
+import "google/protobuf/struct.proto";
+
+service DAGDebugService {
+  rpc ExecuteDAG(ExecuteDAGRequest) returns (ExecuteDAGResponse) {}
+}
+message DebugExecutionRequestData {
+  string UserId = 1;
+  string FeedType = 2;
+  FeedId FeedId = 3;
+  google.protobuf.Struct FeedMetaData = 4;
+  string FeedContext = 5;
+  string TenantContext = 6;
+  string UserContext = 7;
+  string EntityType = 8;
+  int32 Limit = 9;
+  string Cursor = 10;
+  repeated string CatalogSchedulingStatuses = 11;
+}
+message FeedId {
+  int32 CollectionId = 1;
+  int32 CatalogId = 2;
+  int32 ClpId = 3;
+  int32 SSCatId =4;
+}
+
+message ExecuteDAGRequest {
+  oneof ConfigSource {
+    string RawConfigJson = 1;
+    ConfigSelector Selector = 2;
+  }
+  string ConfigKind = 3;
+  DebugExecutionRequestData  Data = 4;
+}
+
+message ConfigSelector {
+  string FeedType = 1;
+  string TenantCtx = 2;
+  string UserCtx = 3;
+  string FeedCtx = 4;
+  string ServiceTag = 5;
+  string VariantKind = 6;
+  string VariantName = 7;
+}
+
+message ExecuteDAGResponse {
+  bool Success = 1;
+  string Error = 2;
+  map<string, string> Results = 3;
+}
