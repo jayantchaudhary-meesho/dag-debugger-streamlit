@@ -113,29 +113,29 @@ def _process_response(
     pricing_features: List[str]
 ) -> Dict[str, Dict[str, str]]:
     """Process the gRPC response into a dictionary of pricing features."""
-    result = {}
-    if not response.data:
+    result: Dict[str, Dict[str, str]] = {}
+    if not getattr(response, "data", None):
         return result
 
-    for i, _ in enumerate(response.data):
+    for i, resp_entry in enumerate(response.data):
         if i >= len(entity_ids):
-            continue
+            break
 
-        product_id = None
-        for key in entity_ids[i].keys:
-            if key.type == "product_id":
-                product_id = key.value
-                break
-
+        # Safely extract product_id from corresponding entity_ids entry
+        product_id = next((k.value for k in entity_ids[i].keys if k.type == "product_id"), None)
         if not product_id:
             continue
 
-        features = {}
-        if len(response.data[i+1].features) >= 3:
-            for j, feature in enumerate(pricing_features, start=2):
-                if j < len(response.data[i+1].features):
-                    features[feature] = str(response.data[i+1].features[j])
+        # Each resp_entry.features[0] is label, [1] is product_id, subsequent are feature values
+        if len(resp_entry.features) < 2:
+            continue
 
-        result[response.data[i+1].features[1]] = features
+        features: Dict[str, str] = {}
+        for idx, feature_name in enumerate(pricing_features, start=2):
+            if idx < len(resp_entry.features):
+                features[feature_name] = str(resp_entry.features[idx])
+
+        # Map by product_id string
+        result[str(product_id)] = features
 
     return result

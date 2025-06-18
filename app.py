@@ -113,9 +113,12 @@ else:
     selector_feed_ctx = st.text_input("Selector FeedCtx")
     selector_service_tag = st.text_input("Selector ServiceTag")
     selector_variant_kind = st.text_input("Selector VariantKind")
+    st.caption("💡 Examples: Scaleup, Experiment")
     selector_variant_name = st.text_input("Selector VariantName")
+    st.caption("💡 Examples: current-scaleup, experiment-variant-1")
 
 config_kind = st.text_input("Config Kind")
+st.caption("💡 Examples: GenerateFeedOnTheFly, FeedWrite, FeedRead")
 feed_metadata_json = st.text_area("Feed MetaData (JSON)")
 
 def parse_int(val):
@@ -214,7 +217,26 @@ if st.button("Execute DAG"):
             iop_host,
         )
 
-    if response.Success:
+    # Check for errors more comprehensively
+    has_error = False
+    error_message = ""
+    
+    if hasattr(response, 'Success') and not response.Success:
+        has_error = True
+        error_message = getattr(response, 'Error', 'Unknown error occurred')
+    elif hasattr(response, 'Error') and response.Error:
+        has_error = True
+        error_message = response.Error
+    elif not hasattr(response, 'Results') or not response.Results:
+        has_error = True
+        error_message = "No results returned from DAG execution"
+    
+    if has_error:
+        st.error(f"Error executing DAG: {error_message}")
+        # Optionally show the full response for debugging
+        with st.expander("Full Response (for debugging)"):
+            st.write(response)
+    else:
         st.success("DAG executed successfully!")
         # st.write(response)
         # Render debug_config DAG if present
@@ -290,7 +312,12 @@ if st.button("Execute DAG"):
                                                 st.markdown(f"**Serving Price:** ₹{serving_price}")
                                         
                                         with tab2:
-                                            st.json(product)
+                                            # Show original candidate details instead of enriched product
+                                            candidate = next(
+                                                (c for c in parsed if c.get("id") == product.get("catalog_id")),
+                                                product,
+                                            )
+                                            st.json(candidate)
                                         st.markdown("---")
                         else:
                             st.info("No product details found for hero_pids.")
@@ -302,5 +329,3 @@ if st.button("Execute DAG"):
                 with st.expander(f"Result for: {key}"):
                     st.error(f"Could not parse result for {key}: {e}")
                     st.text(value)
-    else:
-        st.error(f"Error executing DAG: {response.Error}")
