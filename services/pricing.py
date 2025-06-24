@@ -1,5 +1,5 @@
 import grpc
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional, Tuple, Union
 from pricing import pricing_service_pb2
 from pricing import pricing_service_pb2_grpc
 
@@ -18,8 +18,10 @@ def get_pricing_features(
     client_id: str,
     user_pincode: str,
     app_version_code: str,
-    pricing_features: List[str]
-) -> Dict[str, Dict[str, str]]:
+    pricing_features: List[str],
+    *,
+    return_raw: bool = False,
+) -> Union[Dict[str, Dict[str, str]], Tuple[Dict[str, Dict[str, str]], Any]]:
     """
     Fetch pricing features for a list of products.
     
@@ -30,6 +32,7 @@ def get_pricing_features(
         user_pincode: User's pincode
         app_version_code: App version code
         pricing_features: List of pricing features to fetch
+        return_raw: Flag to return raw gRPC response for debugging
         
     Returns:
         Dictionary mapping product IDs to their pricing features
@@ -37,6 +40,7 @@ def get_pricing_features(
     channel = grpc.insecure_channel(PRICING_SERVICE_HOST)
     metadata = _build_metadata(user_id, client_id, user_pincode, app_version_code)
     
+    response = None
     try:
         entity_ids = _build_entity_ids(user_id, pdp_data)
         feature_group = _build_feature_group(pricing_features)
@@ -45,9 +49,14 @@ def get_pricing_features(
         stub = pricing_service_pb2_grpc.PricingFeatureRetrievalServiceStub(channel)
         response = stub.retrieveFeatures(request=request, metadata=metadata)
         
-        return _process_response(response, entity_ids, pricing_features)
+        parsed = _process_response(response, entity_ids, pricing_features)
+        if return_raw:
+            return parsed, response
+        return parsed
     except grpc.RpcError as e:
         print(f"gRPC call failed: {e}")
+        if return_raw:
+            return {}, response
         return {}
     finally:
         channel.close()
@@ -112,30 +121,44 @@ def _process_response(
     entity_ids: List[pricing_service_pb2.EntityQueries.EntityId],
     pricing_features: List[str]
 ) -> Dict[str, Dict[str, str]]:
-    """Process the gRPC response into a dictionary of pricing features."""
+    """Process the gRPC response into a dictionary of pricing features.
+
+    The Pricing service returns data in the following shape:
+    response.data[0].features -> header names (user_id, product_id, real_time_product_pricing:serving_price, ...)
+    subsequent data entries      -> corresponding values for each field
+    """
     result: Dict[str, Dict[str, str]] = {}
-    if not getattr(response, "data", None):
+
+    if not getattr(response, "data", None) or len(response.data) < 2:
         return result
 
-    for i, resp_entry in enumerate(response.data):
-        if i >= len(entity_ids):
-            break
+    header = list(response.data[0].features)
 
-        # Safely extract product_id from corresponding entity_ids entry
-        product_id = next((k.value for k in entity_ids[i].keys if k.type == "product_id"), None)
+    # Identify index positions we care about
+    try:
+        product_idx = header.index("product_id")
+    except ValueError:
+        return result  # malformed header
+
+    feature_idx_map: Dict[str, int] = {}
+    for feature_name in pricing_features:
+        key_tag = f"real_time_product_pricing:{feature_name}"
+        if key_tag in header:
+            feature_idx_map[feature_name] = header.index(key_tag)
+
+    # Iterate over rows starting from 1 (since 0 is header)
+    for row in response.data[1:]:
+        values = list(row.features)
+        if len(values) != len(header):
+            continue  # skip malformed row
+        product_id = values[product_idx]
         if not product_id:
             continue
-
-        # Each resp_entry.features[0] is label, [1] is product_id, subsequent are feature values
-        if len(resp_entry.features) < 2:
-            continue
-
         features: Dict[str, str] = {}
-        for idx, feature_name in enumerate(pricing_features, start=2):
-            if idx < len(resp_entry.features):
-                features[feature_name] = str(resp_entry.features[idx])
-
-        # Map by product_id string
-        result[str(product_id)] = features
+        for fname, idx in feature_idx_map.items():
+            if idx < len(values):
+                features[fname] = values[idx]
+        if features:
+            result[str(product_id)] = features
 
     return result

@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Optional
 # Constants
 TAXONOMY_API_URL = "http://taxonomy-new.prd.meesho.int/api/v2/product/aggregation"
 BATCH_SIZE = 100
-REQUEST_TIMEOUT = 10
+REQUEST_TIMEOUT = 1000
 
 def fetch_product_details(product_id_list: List[str]) -> List[Dict[str, Any]]:
     """

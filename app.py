@@ -33,6 +33,32 @@ FEED_TYPES: List[str] = [
     "recently_viewed_catalog_recommendation",
 ]
 
+FEED_CONTEXTS = [
+    "default",
+    "gold",
+    "mall",
+    "cta_recommendation",
+    "new",
+    "widget",
+    "gold_widget",
+    "mall_widget",
+    "high_asp_widget",
+    "brand_widget",
+    "top_of_pdp_widget",
+    "fy_pop_up_widget",
+    "search_pop_up_widget",
+    "clp_applied_filters_enabled_gst_head_torso",
+    "clp_applied_filters_enabled_gst_tail",
+    "clp_applied_filters_enabled_mixed_head_torso",
+    "clp_applied_filters_enabled_mixed_tail",
+    "clp_applied_filters_disabled_gst_head_torso",
+    "clp_applied_filters_disabled_gst_tail",
+    "clp_applied_filters_disabled_mixed_head_torso",
+    "clp_applied_filters_disabled_mixed_tail",
+    "ss_cat",
+    "wishlist",
+]
+
 @st.cache_data(show_spinner=False)
 def _cached_get_hero_pid_map(catalog_ids: List[int]):
     """Batch-fetch hero PIDs for a list of catalog IDs (cached)."""
@@ -86,11 +112,16 @@ elif feed_type == "recently_viewed_catalog_recommendation":
     ss_cat_id_str = st.text_input("SS Cat ID")
 # for_you feed type doesn't need any ID input
 
-feed_context = st.text_input("Feed Context", value="default")
-tenant_context = st.text_input("Tenant Context", value="organic")
-user_context = st.text_input("User Context", value="logged_in")
+feed_context = st.selectbox("Feed Context", FEED_CONTEXTS, index=0)
+
+tenant_context = st.selectbox("Tenant Context", ["organic", "ad", "ct"], index=0)
+
+user_context = st.selectbox("User Context", ["logged_in", "anonymous"], index=0)
+
 entity_type = st.text_input("Entity Type", value="catalog")
-limit_str = st.text_input("Limit")
+
+limit_str = st.text_input("Limit (for catalog_validator)")
+
 cursor = st.text_input("Cursor")
 catalog_scheduling_statuses = st.text_area("Catalog Scheduling Statuses (comma-separated)")
 
@@ -103,21 +134,21 @@ selector_feed_ctx = ""
 selector_service_tag = ""
 selector_variant_kind = ""
 selector_variant_name = ""
-selector = None
-if config_source_type == "RawConfigJson":
-    raw_config_json = st.text_area("Raw Config JSON", value='{"feed_write":{"config":{"enabled":true,"name":"fy_organic_scaleup_generate","is_not_user_level":false,"result_component":"fy_organic_single_version_cache_feed_setter","dag_config":{"fy_organic_single_version_feed_generation_eligibility_checker:1:on_success":["fy_online_cg_connector:1","fy_online_cg_connector:2","fy_online_cg_connector:3"],"fy_online_cg_connector:1":["fy_organic_model_proxy_connector"],"fy_online_cg_connector:2":["fy_organic_model_proxy_connector"],"fy_online_cg_connector:3":["fy_organic_cross_category_selector"],"fy_organic_model_proxy_connector":["fy_organic_cross_category_selector"],"fy_organic_cross_category_selector":["random_weight_merger"],"random_weight_merger":["fy_organic_single_version_cache_feed_setter"]},"component_config":{"fy_organic_single_version_feed_generation_eligibility_checker:1":{"cache_version":"2","cache_ttl_in_secs":7200},"fy_online_cg_connector:1":{"algo_name":"interaction_based_similarity","algo_variant_id":"scaleup","online_cg_host_id":"exploit","limit":166},"fy_online_cg_connector:2":{"algo_name":"explore","algo_variant_id":"scaleup","online_cg_host_id":"exploit","limit":166},"fy_online_cg_connector:3":{"algo_name":"cross_category","algo_variant_id":"obyv_100k_soft_filter_sscat","online_cg_host_id":"exploit","limit":250},"fy_organic_model_proxy_connector":{"host_id":"fy-exploit-scaleup","config_id":"fy-organic-scale-up","merge_strategy_on_failure":"shuffle","merge_config":{"max_merge_item":"500"},"is_soft_failure_enabled":true,"failure_threshold_percent":60},"fy_organic_single_version_cache_feed_setter":{"cache_version":"2"},"random_weight_merger":{"max_merge_limit":500,"source_config":{"model_proxy":{"weight":1},"cross_category":{"weight":1}},"candidate_source_key":{"explore":"secondary_source","interaction_based_similarity":"secondary_source"}}}}},"feed_read":{"config":{"enabled":true,"name":"fy_organic_scaleup_serve","is_not_user_level":false,"result_component":"fy_organic_cursor_builder","dag_config":{"fy_organic_single_version_cache_feed_getter":["catalog_validator"],"catalog_validator":["fy_organic_cursor_builder"]},"component_config":{"fy_organic_single_version_cache_feed_getter":{"cache_version":"2"}}}}}')
-else:
-    selector_feed_type = st.text_input("Selector Feed Type")
-    selector_tenant_ctx = st.text_input("Selector TenantCtx")
-    selector_user_ctx = st.text_input("Selector UserCtx")
-    selector_feed_ctx = st.text_input("Selector FeedCtx")
-    selector_service_tag = st.text_input("Selector ServiceTag")
-    selector_variant_kind = st.text_input("Selector VariantKind")
-    st.caption("💡 Examples: Scaleup, Experiment")
-    selector_variant_name = st.text_input("Selector VariantName")
-    st.caption("💡 Examples: current-scaleup, experiment-variant-1")
 
-config_kind = st.text_input("Config Kind")
+selector = None
+
+if config_source_type == "RawConfigJson":
+    raw_config_json = st.text_area("Raw Config JSON", value="")
+else:
+    selector_feed_type = st.selectbox("Selector Feed Type", FEED_TYPES, index=0)
+    selector_tenant_ctx = st.selectbox("Selector TenantCtx", ["organic", "ad", "ct"], index=0)
+    selector_user_ctx = st.selectbox("Selector UserCtx", ["logged_in", "anonymous"], index=0)
+    selector_feed_ctx = st.selectbox("Selector FeedCtx", FEED_CONTEXTS, index=0)
+    # selector_service_tag = st.text_input("Selector ServiceTag")
+    selector_variant_kind = st.text_input("Selector VariantKind")
+    selector_variant_name = st.text_input("Selector VariantName")
+
+config_kind = st.text_input("Config Kind", value="FeedWrite")
 st.caption("💡 Examples: GenerateFeedOnTheFly, FeedWrite, FeedRead")
 feed_metadata_json = st.text_area("Feed MetaData (JSON)")
 
@@ -187,8 +218,8 @@ if st.button("Execute DAG"):
             selector_kwargs["UserCtx"] = selector_user_ctx
         if selector_feed_ctx:
             selector_kwargs["FeedCtx"] = selector_feed_ctx
-        if selector_service_tag:
-            selector_kwargs["ServiceTag"] = selector_service_tag
+        # if selector_service_tag:
+        #     selector_kwargs["ServiceTag"] = selector_service_tag
         if selector_variant_kind:
             selector_kwargs["VariantKind"] = selector_variant_kind
         if selector_variant_name:
@@ -289,6 +320,17 @@ if st.button("Execute DAG"):
                                 user_id=user_id,
                                 pdp_data=pdp_data,
                             )
+                            # Debug: show raw pricing gRPC response (no nested expander)
+                            _, raw_pricing_resp = get_pricing_features(
+                                user_id=user_id,
+                                pdp_data=pdp_data,
+                                client_id="ios",
+                                user_pincode="122001",
+                                app_version_code="685",
+                                pricing_features=PRICING_FEATURES,
+                                return_raw=True,
+                            )
+                            # st.write(str(raw_pricing_resp))
                             for prod in product_details:
                                 pid = str(prod.get("product_id"))
                                 prod["pricing"] = pricing_data.get(pid, {})
