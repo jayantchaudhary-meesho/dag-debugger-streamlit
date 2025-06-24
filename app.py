@@ -301,12 +301,18 @@ if st.button("Execute DAG"):
             try:
                 parsed = json.loads(value)
                 if isinstance(parsed, list) and all(isinstance(item, dict) for item in parsed):
-                    # Show expander with product count
-                    with st.expander(f"Result for: {key} ({len(parsed)} results)"):
+                    total_results = len(parsed)
+                    max_display = 100
+                    display_items = parsed[:max_display]
+                    # Show expander with product count (total), but mention max 200 shown
+                    expander_label = f"Result for: {key} ({total_results} results)"
+                    with st.expander(expander_label):
+                        if total_results > max_display:
+                            st.write(f"Showing only the first {max_display} items out of {total_results} for performance reasons.")
                         with st.spinner("Fetching hero PIDs in batch..."):
-                            catalog_ids = [item.get("id") for item in parsed if item.get("id") is not None]
+                            catalog_ids = [item.get("id") for item in display_items if item.get("id") is not None]
                             hero_pid_map = _cached_get_hero_pid_map(catalog_ids)
-                            for item in parsed:
+                            for item in display_items:
                                 cid = item.get("id")
                                 item["hero_pid"] = hero_pid_map.get(cid, "N/A")
                         hero_pids = [pid for pid in hero_pid_map.values() if pid != "N/A"]
@@ -330,7 +336,6 @@ if st.button("Execute DAG"):
                                 pricing_features=PRICING_FEATURES,
                                 return_raw=True,
                             )
-                            # st.write(str(raw_pricing_resp))
                             for prod in product_details:
                                 pid = str(prod.get("product_id"))
                                 prod["pricing"] = pricing_data.get(pid, {})
